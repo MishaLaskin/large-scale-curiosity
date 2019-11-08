@@ -1,4 +1,6 @@
+
 import time
+import os
 
 import numpy as np
 import tensorflow as tf
@@ -12,6 +14,7 @@ from rollouts import Rollout
 from utils import bcast_tf_vars_from_root, get_mean_and_std
 from vec_env import ShmemVecEnv as VecEnv
 
+
 getsess = tf.get_default_session
 
 
@@ -22,7 +25,7 @@ class PpoOptimizer(object):
                  ent_coef, gamma, lam, nepochs, lr, cliprange,
                  nminibatches,
                  normrew, normadv, use_news, ext_coeff, int_coeff,
-                 nsteps_per_seg, nsegs_per_env, dynamics):
+                 nsteps_per_seg, nsegs_per_env, dynamics, n_eval_steps):
         self.dynamics = dynamics
         with tf.variable_scope(scope):
             self.use_recorder = True
@@ -35,6 +38,7 @@ class PpoOptimizer(object):
             self.lr = lr
             self.cliprange = cliprange
             self.nsteps_per_seg = nsteps_per_seg
+            self.n_eval_steps = n_eval_steps
             self.nsegs_per_env = nsegs_per_env
             self.nminibatches = nminibatches
             self.gamma = gamma
@@ -70,8 +74,9 @@ class PpoOptimizer(object):
             self.to_report = {'tot': self.total_loss, 'pg': pg_loss, 'vf': vf_loss, 'ent': entropy,
                               'approxkl': approxkl, 'clipfrac': clipfrac}
 
-    def start_interaction(self, env_fns, dynamics, nlump=2):
-        self.loss_names, self._losses = zip(*list(self.to_report.items()))
+    def start_interaction(self, env_fns, dynamics, nlump=2, train=True):
+        if train:
+            self.loss_names, self._losses = zip(*list(self.to_report.items()))
 
         params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
         if MPI.COMM_WORLD.Get_size() > 1:
@@ -79,7 +84,9 @@ class PpoOptimizer(object):
         else:
             trainer = tf.train.AdamOptimizer(learning_rate=self.ph_lr)
         gradsandvars = trainer.compute_gradients(self.total_loss, params)
-        self._train = trainer.apply_gradients(gradsandvars)
+
+        if train:
+            self._train = trainer.apply_gradients(gradsandvars)
 
         if MPI.COMM_WORLD.Get_rank() == 0:
             getsess().run(tf.variables_initializer(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)))
@@ -102,7 +109,9 @@ class PpoOptimizer(object):
                                int_rew_coeff=self.int_coeff,
                                ext_rew_coeff=self.ext_coeff,
                                record_rollouts=self.use_recorder,
-                               dynamics=dynamics)
+                               dynamics=dynamics,
+                               n_eval_steps=self.n_eval_steps
+                               )
 
         self.buf_advs = np.zeros((nenvs, self.rollout.nsteps), np.float32)
         self.buf_rets = np.zeros((nenvs, self.rollout.nsteps), np.float32)
@@ -132,7 +141,12 @@ class PpoOptimizer(object):
             self.buf_advs[:, t] = lastgaelam = delta + gamma * lam * nextnotnew * lastgaelam
         self.buf_rets[:] = self.buf_advs + self.rollout.buf_vpreds
 
-    def update(self):
+    def update(self, eval=False):
+        if eval:
+            info = {}
+            info.update(self.rollout.stats)
+            return info
+        
         if self.normrew:
             rffs = np.array([self.rff.update(rew) for rew in self.rollout.buf_rews.T])
             rffs_mean, rffs_std, rffs_count = mpi_moments(rffs.ravel())
@@ -200,6 +214,7 @@ class PpoOptimizer(object):
         self.n_updates += 1
         info["n_updates"] = self.n_updates
         info.update({dn: (np.mean(dvs) if len(dvs) > 0 else 0) for (dn, dvs) in self.rollout.statlists.items()})
+        # only need access to this
         info.update(self.rollout.stats)
         if "states_visited" in info:
             info.pop("states_visited")
@@ -211,10 +226,16 @@ class PpoOptimizer(object):
 
         return info
 
-    def step(self):
-        self.rollout.collect_rollout()
-        update_info = self.update()
-        return {'update': update_info}
+    def step(self, eval=False,include_images=False):
+        
+        data = self.rollout.collect_rollout(eval=eval,include_images=include_images)
+        
+        # comment this update out
+        update_info = self.update(eval=eval)
+        data['update'] = update_info
+        if eval:
+            return data
+        {'update': update_info}
 
     def get_var_values(self):
         return self.stochpol.get_var_values()

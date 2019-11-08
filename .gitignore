@@ -106,3 +106,7 @@ venv.bak/
 .mypy_cache/
 
 .idea/
+tmp*
+*.mp4
+images*
+notebooks*

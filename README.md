@@ -33,9 +33,36 @@ python run.py
 ```
 To use more than one gpu/machine, use MPI (e.g. `mpiexec -n 8 python run.py` should use 1024 parallel environments to collect experience instead of the default 128 on an 8 gpu machine).
 
+### Saving Agents
+
+The policy is automatically saved during training. Specify a path to your desired folder with the `--saved_model_dir` flag, e.g.:
+
+python run.py --saved_model_dir YOUR_SAVED_MODEL_FOLDER
+
+The model filename is hardcoded to be `model.ckpt`, but in your folder you'll find `model.ckpt-{INTEGER}` files where integer corresponds to a specific save since the model is saved periodically.
+
+### Restoring Saved Agents
+
+Once you've ran and saved an agent, you can restore it by specifying the saved model folder and the model name with the `--saved_model_dir` and `--model_name` flags. The model name should be `model.ckpt-{INTEGER}` without the `.index` suffix, so `model.ckpt-100` would be a valid model name.
+
+### Evaluating a Restored Agent
+
+In order to evaluate you have to enable the `-eval` flag. You can specify the evaluation length with the `--n_eval_steps` argument, which is set to 512 steps by default. Note: the default number of workers is 128 workers and is set by `--envs_per_process`, so if you run the default configuration you will get 128 parallel rollouts of 512 length each.  
+
+Running evaluation will automatically generate a dataset of saved actions. You can also get image observations from the evaluation run if you enable the `-include_images` flag. If you include images, the data file size can get quite large (~1.8G for 128 workers x 512 steps per worker).
+
+Here's an example command for running evaluation and collecting a dataset that includes images:
+
+python run.py -eval -include_images --saved_model_dir ./tmp/ --model_name model.ckpt-100
+
+### Visualizing the Evaluation Dataset 
+
+Now that you've saved your data, you should have a file names `{env_name}_data.npy` (for example, `BreakoutNoFrameskip-v4_data.npy`) in your current directory. To visualize, open the `Visualization.ipynb` notebook and run it. You should get a video of the saved rollouts if you included images. Sense check these to make sure the curiosity code is working correctly.
+
 ### Data for plots in paper
 
 [Data for Figure-2](https://www.dropbox.com/s/ufr7o8g9omb9zpl/experiments.tar.gz): contains raw game score data along with the plotting code to generate Figure-2 in the paper.
+
 
 ### Other helpful pointers
 - [Paper](https://pathak22.github.io/large-scale-curiosity/resources/largeScaleCuriosity2018.pdf)

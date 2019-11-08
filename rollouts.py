@@ -8,7 +8,7 @@ from recorder import Recorder
 
 class Rollout(object):
     def __init__(self, ob_space, ac_space, nenvs, nsteps_per_seg, nsegs_per_env, nlumps, envs, policy,
-                 int_rew_coeff, ext_rew_coeff, record_rollouts, dynamics):
+                 int_rew_coeff, ext_rew_coeff, record_rollouts, dynamics,n_eval_steps):
         self.nenvs = nenvs
         self.nsteps_per_seg = nsteps_per_seg
         self.nsegs_per_env = nsegs_per_env
@@ -20,6 +20,7 @@ class Rollout(object):
         self.envs = envs
         self.policy = policy
         self.dynamics = dynamics
+        self.n_eval_steps = n_eval_steps * self.nsegs_per_env
 
         self.reward_fun = lambda ext_rew, int_rew: ext_rew_coeff * np.clip(ext_rew, -1., 1.) + int_rew_coeff * int_rew
 
@@ -49,12 +50,21 @@ class Rollout(object):
 
         self.step_count = 0
 
-    def collect_rollout(self):
+    def collect_rollout(self,eval=False,include_images=False):
+        data = {'obs':[],'acts':[],'news':[]}
         self.ep_infos_new = []
-        for t in range(self.nsteps):
-            self.rollout_step()
+        n = self.n_eval_steps if eval else self.nsteps
+        for t in range(n):
+            datum = self.rollout_step(eval=eval)
+            if eval:
+                if include_images:
+                    data['obs'].append(datum[0])
+                data['news'].append(datum[1])
+                data['acts'].append(datum[2])
         self.calculate_reward()
         self.update_info()
+        data = {k:np.array(v) for k,v in data.items()} 
+        return data 
 
     def calculate_reward(self):
         int_rew = self.dynamics.calculate_loss(ob=self.buf_obs,
@@ -62,9 +72,12 @@ class Rollout(object):
                                                acs=self.buf_acs)
         self.buf_rews[:] = self.reward_fun(int_rew=int_rew, ext_rew=self.buf_ext_rews)
 
-    def rollout_step(self):
+    def rollout_step(self,eval=False):
         t = self.step_count % self.nsteps
         s = t % self.nsteps_per_seg
+
+        
+
         for l in range(self.nlumps):
             obs, prevrews, news, infos = self.env_get(l)
             # if t > 0:
@@ -122,6 +135,7 @@ class Rollout(object):
                     #
                     # self.int_rew[sli] = int_rew
                     # self.buf_rews[sli, t] = self.reward_fun(ext_rew=ext_rews, int_rew=int_rew)
+        return [obs, news, acs] if eval else None 
 
     def update_info(self):
         all_ep_infos = MPI.COMM_WORLD.allgather(self.ep_infos_new)
