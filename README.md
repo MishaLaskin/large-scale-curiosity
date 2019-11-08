@@ -37,7 +37,9 @@ To use more than one gpu/machine, use MPI (e.g. `mpiexec -n 8 python run.py` sho
 
 The policy is automatically saved during training. Specify a path to your desired folder with the `--saved_model_dir` flag, e.g.:
 
+```
 python run.py --saved_model_dir YOUR_SAVED_MODEL_FOLDER
+```
 
 The model filename is hardcoded to be `model.ckpt`, but in your folder you'll find `model.ckpt-{INTEGER}` files where integer corresponds to a specific save since the model is saved periodically.
 
@@ -53,7 +55,9 @@ Running evaluation will automatically generate a dataset of saved actions. You c
 
 Here's an example command for running evaluation and collecting a dataset that includes images:
 
+```
 python run.py -eval -include_images --saved_model_dir ./tmp/ --model_name model.ckpt-100
+```
 
 ### Visualizing the Evaluation Dataset 
 
