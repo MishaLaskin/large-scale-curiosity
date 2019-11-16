@@ -244,9 +244,9 @@ def make_mario_env(crop=True, frame_stack=True, clip_rewards=False):
     import retro
     from baselines.common.atari_wrappers import FrameStack
 
-    gym.undo_logger_setup()
+    #gym.undo_logger_setup()
     env = retro.make('SuperMarioBros-Nes', 'Level1-1')
-    buttons = env.BUTTONS
+    buttons = env.buttons
     env = MarioXReward(env)
     env = FrameSkip(env, 4)
     env = ProcessFrame84(env, crop=crop)

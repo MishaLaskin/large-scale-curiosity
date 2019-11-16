@@ -157,9 +157,10 @@ class Trainer(object):
             
             info = self.agent.step(eval=False)
             
-            if info['update'] and not restore:
-                logger.logkvs(info['update'])
-                logger.dumpkvs()
+            if info is not None:
+                if info['update'] and not restore:
+                    logger.logkvs(info['update'])
+                    logger.dumpkvs()
 
             steps = self.agent.rollout.stats['tcount']
             
@@ -293,7 +294,7 @@ if __name__ == '__main__':
     parser.add_argument('--saved_model_dir', type=str,
                         default='./tmp/')
     parser.add_argument('--model_name', type=str,
-                        default='model.ckpt-305')
+                        default='model.ckpt-269')
     parser.add_argument('-eval', action='store_true')
     parser.add_argument('-include_images', action='store_true')
 
